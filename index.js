@@ -33,16 +33,30 @@ async function run() {
     // await client.connect();
     const bistroBossCollection = client.db('bistroBoss').collection('menu');
     const reviewsCollection = client.db('bistroBoss').collection('review');
-
+    const addToCartsCollection = client.db('bistroBoss').collection('cart');
+    // all menu item =====================
     app.get('/menu',async(req,res)=>{
       const menu = await bistroBossCollection.find().toArray();
       res.send(menu);
     })
+    // all customer reviews ========================
     app.get('/review',async(req,res)=>{
       const review = await reviewsCollection.find().toArray();
       res.send(review);
     })
-    
+    // get all cart item ======================
+    app.get('/cart',async(req,res)=>{
+      const email = req.query.email;
+      const query = {email : email};
+      const cartItems = await addToCartsCollection.find(query).toArray();
+      res.send(cartItems);
+    })
+    // post add to cart item ===============================
+    app.post('/cart',async(req,res)=>{
+      const newItem = req.body;
+      const result = await addToCartsCollection.insertOne(newItem);
+      res.send(result);
+    })
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
