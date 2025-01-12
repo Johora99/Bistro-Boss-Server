@@ -26,7 +26,20 @@ const client = new MongoClient(uri, {
     deprecationErrors: true,
   }
 });
-
+  const verifyToken = (req,res,next)=>{
+    if(!req.headers.authorization){
+      return res.status(401).send({message : 'unauthorize access'})
+    }
+    const token = req.headers.authorization.split(' ')[1];
+    jwt.verify(token,process.env.ACCESS_TOKEN_SECRET,(err,decoded)=>{
+         if(err){
+          return res.status(401).send({message : 'unauthorize access'})
+         }
+         req.decoded = decoded;
+         next();
+    })
+  }
+  
 async function run() {
   
   try {
@@ -36,8 +49,20 @@ async function run() {
     const reviewsCollection = client.db('bistroBoss').collection('review');
     const addToCartsCollection = client.db('bistroBoss').collection('cart');
     const userCollection = client.db('bistroBoss').collection('user');
+
+// middle ware for verify admin =================================
+    const verifyAdmin = async (req,res,next)=>{
+    const email = req.decoded.email;
+    const query = {user_email :email };
+    const user = await userCollection.findOne(query);
+    const isAdmin = user?.role === 'admin';
+    if(!isAdmin){
+      return res.status(403).send({message : 'forbidden access'})
+      }
+      next();
+  }
     // jwt token generate ===============================
-    app.post('jwt',async(req,res)=>{
+    app.post('/jwt',async(req,res)=>{
       const user = req.body;
       const token = jwt.sign(user,process.env.ACCESS_TOKEN_SECRET,{expiresIn:'1d'})
       res.send({token})
@@ -54,16 +79,32 @@ async function run() {
       res.send(review);
     })
     // get all cart item ======================
-    app.get('/cart',async(req,res)=>{
+    app.get('/cart',verifyToken,async(req,res)=>{
       const email = req.query.email;
       const query = {email : email};
       const cartItems = await addToCartsCollection.find(query).toArray();
       res.send(cartItems);
     })
     // get all user information ========================
-    app.get('/user',async(req,res)=>{
+    app.get('/user',verifyToken,verifyAdmin,async(req,res)=>{
       const result = await userCollection.find().toArray();
       res.send(result);
+    })
+    // get user base on email ===========================
+    app.get('/user/admin/:email',verifyToken,async(req,res)=>{
+      const email = req.params.email;
+      const decoded_email = req.decoded.email;
+      if(email !== decoded_email){
+        return res.status(403).send({message : 'forbidden access'})
+      }
+      const query = {user_email : email}
+      const user = await userCollection.findOne(query);
+      let admin = false;
+      if(user){
+        admin = user?.role === 'admin'
+      }
+        
+      res.send({admin})
     })
     // post user information ============================
     app.post('/user',async(req,res)=>{
@@ -79,7 +120,7 @@ async function run() {
       }
     })
     // update user ============================
-    app.patch('/user/:id',async(req,res)=>{
+    app.patch('/user/:id',verifyToken,verifyAdmin,async(req,res)=>{
       const id = req.params.id;
       const query = {_id : new ObjectId(id)};
       const update = {
@@ -91,20 +132,20 @@ async function run() {
       res.send(result);
     })
     // delete user =============================
-    app.delete('/user/:id',async(req,res)=>{
+    app.delete('/user/:id',verifyToken,verifyAdmin,async(req,res)=>{
       const id = req.params.id;
       const query = {_id : new ObjectId(id)};
       const result = await userCollection.deleteOne(query);
       res.send(result);
     })
     // post add to cart item ===============================
-    app.post('/cart',async(req,res)=>{
+    app.post('/cart',verifyToken,async(req,res)=>{
       const newItem = req.body;
       const result = await addToCartsCollection.insertOne(newItem);
       res.send(result);
     })
     // delete cart item ============================
-    app.delete('/cart/:id',async(req,res)=>{
+    app.delete('/cart/:id',verifyToken,async(req,res)=>{
       const id = req.params.id;
       const query = {_id : new ObjectId(id)};
       const result = await addToCartsCollection.deleteOne(query);
